@@ -6,7 +6,7 @@ import org.services.NotificationServiceImpl
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 fun main() {
-    val service: NotificationServiceImpl = NotificationServiceImpl(Gateway())
+    val service = NotificationServiceImpl(Gateway())
     service.send("news", "user", "news 1")
     service.send("news", "user", "news 2")
     service.send("news", "user", "news 3")

@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.0.20"
     application
+    jacoco
 }
 
 group = "org"
@@ -20,4 +21,8 @@ tasks.test {
 
 application {
     mainClass = "org.MainKt"
+}
+
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport)
 }
