@@ -16,4 +16,9 @@ class RateLimiterImpl : RateLimiter {
     override fun isAllowed(userId: String): Boolean {
         return bucket.tryConsume(1)
     }
+
+    override fun getBlockedTime(userId: String): Long {
+        val delay = bucket.estimateAbilityToConsume(1).nanosToWaitForRefill
+        return if (delay > 0) delay / 1_000_000 else 0
+    }
 }
