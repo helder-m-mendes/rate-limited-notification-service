@@ -2,6 +2,7 @@ package org.services
 
 import org.dtos.Notification
 import software.amazon.awssdk.services.sqs.SqsClient
+import software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest
 
 class NotificationServiceImpl(
@@ -22,7 +23,15 @@ class NotificationServiceImpl(
                 .messageBody(notification.toString())
                 .delaySeconds((blockedTime / 1000).toInt())
                 .build()
-            sqsClient.sendMessage(sendMessageRequest)
+            try {
+                sqsClient.sendMessage(sendMessageRequest)
+            } catch (e: QueueDoesNotExistException) {
+                println("The specified queue does not exist: ${e.message}")
+            }
         }
+    }
+
+    fun getQueueUrl(): String {
+        return queueUrl
     }
 }
