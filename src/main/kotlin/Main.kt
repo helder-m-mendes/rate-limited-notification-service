@@ -2,11 +2,12 @@ package org
 
 import org.services.Gateway
 import org.services.NotificationServiceImpl
+import org.services.RateLimiterImpl
 
 //TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 fun main() {
-    val service = NotificationServiceImpl(Gateway())
+    val service = NotificationServiceImpl(Gateway(), RateLimiterImpl())
     service.send("news", "user", "news 1")
     service.send("news", "user", "news 2")
     service.send("news", "user", "news 3")

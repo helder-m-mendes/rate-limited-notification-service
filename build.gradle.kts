@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "2.0.20"
+
     application
     jacoco
 }
@@ -13,6 +14,7 @@ repositories {
 
 dependencies {
     testImplementation(kotlin("test"))
+    implementation("com.github.vladimir-bukhtoyarov:bucket4j-core:7.3.0")
 }
 
 tasks.test {

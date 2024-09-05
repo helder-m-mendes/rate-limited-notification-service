@@ -5,6 +5,7 @@ import java.io.PrintStream
 import kotlin.test.Test
 
 class MainTest {
+
     @Test
     fun `Given a normal environment the code should be run thoroughly`() {
         val outputStream = ByteArrayOutputStream()
