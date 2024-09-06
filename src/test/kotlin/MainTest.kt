@@ -1,103 +1,54 @@
-package org
-
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
-import org.junit.jupiter.api.AfterEach
+import dtos.RateLimitRule
+import infrasctructure.jms.JmsConfig
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.services.Gateway
-import org.services.NotificationServiceImpl
-import org.services.RateLimiter
-import org.services.RetryWorker
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
-import software.amazon.awssdk.regions.Region
+import org.main.main
+import org.services.RateLimiterImpl
 import software.amazon.awssdk.services.sqs.SqsClient
-import software.amazon.awssdk.services.sqs.model.CreateQueueRequest
-import software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException
-import software.amazon.awssdk.services.sqs.model.SendMessageRequest
-import java.net.URI
+import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 class MainTest {
-
     private lateinit var sqsClient: SqsClient
-    private lateinit var notificationService: NotificationServiceImpl
-    private lateinit var retryWorker: RetryWorker
-    private val gateway: Gateway = mockk()
-    private val rateLimiter: RateLimiter = mockk()
+    private lateinit var queueUrl: String
+    private lateinit var rateLimiter: RateLimiterImpl
 
     @BeforeEach
     fun setUp() {
-        val endpoint = URI.create(System.getenv("AWS_ENDPOINT") ?: "http://localhost:4566")
-        val awsCredentials = AwsBasicCredentials.create("test", "test")
-        sqsClient = mockk()
-        every { sqsClient.createQueue(any<CreateQueueRequest>()) } returns mockk {
-            every { queueUrl() } returns "http://localhost:4566/000000000000/notification-queue"
-        }
+        queueUrl = JmsConfig.queueUrl()
 
-        val createQueueRequest = CreateQueueRequest.builder()
-            .queueName("notification-queue")
-            .build()
-        val createQueueResponse = sqsClient.createQueue(createQueueRequest)
-        val queueUrl = createQueueResponse.queueUrl()
+        // Purge the queue to ensure it's empty before each test
+        JmsConfig.sqsClient.purgeQueue(PurgeQueueRequest.builder().queueUrl(queueUrl).build())
 
-        notificationService = NotificationServiceImpl(gateway, rateLimiter, sqsClient, queueUrl)
-        retryWorker = RetryWorker(notificationService, sqsClient, queueUrl)
-        retryWorker.start()
-    }
+        // Define rate limit rules
+        val rules = listOf(
+            RateLimitRule("status", 2, 1.minutes),
+            RateLimitRule("news", 1, 1.days),
+            RateLimitRule("marketing", 3, 1.hours),
+            RateLimitRule("default", 10, 1.minutes)
+        )
 
-    @AfterEach
-    fun tearDown() {
-        retryWorker.stop()
+        // Initialize RateLimiter
+        rateLimiter = RateLimiterImpl(rules)
     }
 
     @Test
-    fun `test sending notifications`() {
-        every { rateLimiter.isAllowed(any()) } returns true
-        every { gateway.sendNotification(any(), any(), any()) } returns Unit
+    fun testMainFunction() = runBlocking {
+        // Call the main function
+        main()
 
-        notificationService.send("news", "user", "news 1")
+        // Verify the state of the buckets
+        val newsBucket = rateLimiter.getBucket("user", "news")
+        val anotherUserNewsBucket = rateLimiter.getBucket("another user", "news")
+        val updateBucket = rateLimiter.getBucket("user", "update")
 
-        verify { gateway.sendNotification("news", "user", "news 1") }
-    }
-
-    @Test
-    fun `test rate-limited notifications`() {
-        every { rateLimiter.isAllowed(any()) } returns false
-        every { rateLimiter.getBlockedTime(any()) } returns 2000L
-        every { sqsClient.sendMessage(any<SendMessageRequest>()) } returns mockk()
-
-        notificationService.send("news", "user", "news 1")
-
-        verify {
-            sqsClient.sendMessage(
-                withArg<SendMessageRequest> {
-                    it.queueUrl() == notificationService.getQueueUrl()
-                    it.messageBody().contains("news 1")
-                    it.delaySeconds() == 2
-                }
-            )
-        }
-    }
-
-    @Test
-    fun `test queue does not exist exception`() {
-        every { rateLimiter.isAllowed(any()) } returns false
-        every { rateLimiter.getBlockedTime(any()) } returns 2000L
-        every { sqsClient.sendMessage(any<SendMessageRequest>()) } throws QueueDoesNotExistException.builder()
-            .message("Queue does not exist").build()
-
-        notificationService.send("news", "user", "news 1")
-
-        verify {
-            sqsClient.sendMessage(
-                withArg<SendMessageRequest> {
-                    it.queueUrl() == notificationService.getQueueUrl()
-                    it.messageBody().contains("news 1")
-                    it.delaySeconds() == 2
-                }
-            )
-        }
+        // Assert the tokens remaining in the buckets
+        assertEquals(1, newsBucket.getAvailableTokens())
+        assertEquals(1, anotherUserNewsBucket.getAvailableTokens())
+        assertEquals(10, updateBucket.getAvailableTokens())
     }
 }

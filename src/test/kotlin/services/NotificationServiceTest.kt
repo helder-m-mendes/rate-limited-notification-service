@@ -1,54 +1,48 @@
 package org.services
 
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
-import org.dtos.Notification
+import dtos.RateLimitRule
+import infrasctructure.jms.JmsConfig
+import infrasctructure.jms.JmsProducer
+import jakarta.jms.Session
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import software.amazon.awssdk.services.sqs.SqsClient
-import software.amazon.awssdk.services.sqs.model.CreateQueueRequest
-import software.amazon.awssdk.services.sqs.model.CreateQueueResponse
-import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest
-import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse
-import software.amazon.awssdk.services.sqs.model.Message
+import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.seconds
 
 class NotificationServiceTest {
+    private lateinit var sqsClient: SqsClient
+    private lateinit var queueUrl: String
+    private lateinit var rateLimiter: RateLimiterImpl
+    private lateinit var jmsProducer: JmsProducer
+
+    @BeforeEach
+    fun setUp() {
+        val connectionFactory = JmsConfig.createConnectionFactory()
+        val connection = connectionFactory.createConnection()
+        val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
+        val queue = session.createQueue(JmsConfig.queueName)
+         queueUrl = JmsConfig.queueUrl()
+        jmsProducer = JmsProducer(session, queue)
+        // Purge the queue to ensure it's empty before each test
+        JmsConfig.sqsClient.purgeQueue(PurgeQueueRequest.builder().queueUrl(queueUrl).build())
+
+        // Define rate limit rules
+        val rules = listOf(
+            RateLimitRule("news", 1, 30.seconds),
+        )
+
+        // Initialize RateLimiter
+        rateLimiter = RateLimiterImpl(rules)
+    }
 
     @Test
-    fun `test sending notification`() {
-        val sqsClient = mockk<SqsClient>()
-        val queueUrl = "http://localhost:4566/000000000000/notification-queue"
+    fun `test sending notification with rate limiter`() {
+        val notificationService = NotificationServiceImpl(Gateway(), rateLimiter, jmsProducer)
 
-        every { sqsClient.createQueue(any<CreateQueueRequest>()) } returns CreateQueueResponse.builder().queueUrl(queueUrl).build()
-        every { sqsClient.receiveMessage(any<ReceiveMessageRequest>()) } returns ReceiveMessageResponse.builder()
-            .messages(Message.builder().body("""{"type":"news","userId":"user","message":"news 1"}""").build())
-            .build()
-
-        val notificationService = mockk<NotificationServiceImpl>(relaxed = true)
-        every { notificationService.send(any(), any(), any()) } answers {
-            sqsClient.createQueue(CreateQueueRequest.builder().queueName("notification-queue").build())
-            sqsClient.receiveMessage(ReceiveMessageRequest.builder().queueUrl(queueUrl).maxNumberOfMessages(1).build())
-        }
-
-        val type = "news"
-        val userId = "user"
-        val message = "news 1"
-        notificationService.send(type, userId, message)
-
-        val receiveMessageRequest = ReceiveMessageRequest.builder()
-            .queueUrl(queueUrl)
-            .maxNumberOfMessages(1)
-            .build()
-        val messages = sqsClient.receiveMessage(receiveMessageRequest).messages()
-
-        assertEquals(1, messages.size)
-        val receivedMessage = messages[0].body()
-        val expectedMessage = Notification(type, userId, message).toJson()
-        assertEquals(expectedMessage, receivedMessage)
-
-        verify { sqsClient.createQueue(any<CreateQueueRequest>()) }
-        verify { sqsClient.receiveMessage(any<ReceiveMessageRequest>()) }
-        verify { notificationService.send(type, userId, message) }
+        notificationService.send("news", "user", "news 1")
+        notificationService.send("news", "user", "news 1")
+        assertEquals(30.seconds, rateLimiter.getRemainingBlockingTime("user", "news"))
     }
 }

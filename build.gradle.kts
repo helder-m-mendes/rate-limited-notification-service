@@ -1,3 +1,5 @@
+import kotlin.text.set
+
 plugins {
     kotlin("jvm") version "2.0.20"
     application
@@ -14,14 +16,15 @@ repositories {
 
 dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
-    implementation("com.github.vladimir-bukhtoyarov:bucket4j-core:7.3.0")
-    implementation("software.amazon.awssdk:sqs:2.17.89")
+    implementation("org.slf4j:slf4j-api:2.0.0")
+    implementation("org.slf4j:slf4j-simple:2.0.0")
+    implementation("jakarta.jms:jakarta.jms-api:3.1.0")
+    implementation("com.amazonaws:amazon-sqs-java-messaging-lib:2.1.3")
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:1.12.0")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.1")
-    implementation("org.slf4j:slf4j-api:1.7.32")
-    implementation("ch.qos.logback:logback-classic:1.2.6")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
 tasks.test {
@@ -30,7 +33,7 @@ tasks.test {
 }
 
 application {
-    mainClass = "org.MainKt"
+    mainClass = "org.main.MainKt"
 }
 
 docker {
@@ -44,4 +47,16 @@ docker {
 tasks.register<com.bmuschko.gradle.docker.tasks.image.DockerBuildImage>("buildDockerImage") {
     inputDir.set(file("."))
     images.add("${project.group}/${project.name}:${project.version}")
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(22)) // Ensure this matches your installed Java version
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_22)
+    }
 }
