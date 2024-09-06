@@ -5,6 +5,8 @@ services:
       - "4566:4566"
     environment:
       - SERVICES=sqs
+    networks:
+      - ls
 
   app:
     build:
@@ -13,8 +15,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - USE_LOCALSTACK=true
+      - LOCALSTACK_HOSTNAME=localstack
     depends_on:
       - localstack
-
-
+    networks:
+      - ls
+networks:
+    ls:
+        driver: bridge

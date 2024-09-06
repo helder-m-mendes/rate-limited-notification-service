@@ -23,7 +23,7 @@ class NotificationServiceTest {
         val connection = connectionFactory.createConnection()
         val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
         val queue = session.createQueue(JmsConfig.queueName)
-         queueUrl = JmsConfig.queueUrl()
+        queueUrl = JmsConfig.queueUrl()
         jmsProducer = JmsProducer(session, queue)
         // Purge the queue to ensure it's empty before each test
         JmsConfig.sqsClient.purgeQueue(PurgeQueueRequest.builder().queueUrl(queueUrl).build())

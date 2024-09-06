@@ -13,7 +13,7 @@ import java.net.URI
 object JmsConfig {
     val queueName = "notification-queue"
     val sqsClient: SqsClient = SqsClient.builder()
-        .endpointOverride(URI.create("http://localhost:4566")) // LocalStack endpoint
+        .endpointOverride(URI.create("http://${System.getenv("LOCALSTACK_HOSTNAME") ?: "localhost"}:4566")) // LocalStack endpoint
         .region(Region.US_EAST_1)
         .credentialsProvider(
             StaticCredentialsProvider.create(
@@ -32,7 +32,7 @@ object JmsConfig {
         } catch (e: Exception) {
             try {
                 sqsClient.createQueue(CreateQueueRequest.builder().queueName(queueName).build()).queueUrl()
-            } catch (
+            }  catch (
                 e: Exception
             ) {
                 throw RuntimeException("Failed to get queue URL for $queueName", e)

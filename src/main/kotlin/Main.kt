@@ -19,6 +19,7 @@ fun main() = runBlocking {
     val connection = connectionFactory.createConnection()
     val session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)
     val queueUrl = JmsConfig.queueUrl()
+
     val queue = session.createQueue(JmsConfig.queueName)
 
     // Define rate limit rules
